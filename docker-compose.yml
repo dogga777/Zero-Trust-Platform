@@ -1,0 +1,77 @@
+
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: zerotrust
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.6
+    command: start-dev
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/zerotrust
+      KC_DB_USERNAME: admin
+      KC_DB_PASSWORD: secret
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8081:8080"
+    depends_on:
+      - postgres
+
+  opa:
+    image: openpolicyagent/opa:latest
+    command: run --server --addr :8181 /policies
+    volumes:
+      - ./backend/policies:/policies
+    ports:
+      - "8181:8181"
+
+  neo4j:
+    image: neo4j:5
+    environment:
+      NEO4J_AUTH: neo4j/password
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4jdata:/data
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://admin:secret@postgres:5432/zerotrust
+      KEYCLOAK_URL: http://keycloak:8080
+      OPA_URL: http://opa:8181
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: password
+    depends_on:
+      - postgres
+      - keycloak
+      - opa
+      - neo4j
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: http://localhost:8000
+      VITE_KEYCLOAK_URL: http://localhost:8080
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  neo4jdata:
